@@ -7,7 +7,7 @@ import argparse
 import os
 import time
 from loguru import logger
-
+import pandas as pd
 import cv2
 
 import torch
@@ -22,9 +22,7 @@ IMAGE_EXT = [".jpg", ".jpeg", ".webp", ".bmp", ".png"]
 
 def make_parser():
     parser = argparse.ArgumentParser("YOLOX Demo!")
-    parser.add_argument(
-        "demo", default="image", help="demo type, eg. image, video and webcam"
-    )
+    
     parser.add_argument("-expn", "--experiment-name", type=str, default=None)
     parser.add_argument("-n", "--name", type=str, default=None, help="model name")
 
@@ -42,14 +40,14 @@ def make_parser():
     parser.add_argument(
         "-f",
         "--exp_file",
-        default=None,
+        default="./exps/default/yolox_s.py",
         type=str,
         help="please input your experiment description file",
     )
-    parser.add_argument("-c", "--ckpt", default=None, type=str, help="ckpt for eval")
+    parser.add_argument("-c", "--ckpt", default="best.pth", type=str, help="ckpt for eval")
     parser.add_argument(
         "--device",
-        default="cpu",
+        default="gpu",
         type=str,
         help="device to run our model, can either be cpu or gpu",
     )
@@ -181,8 +179,8 @@ class Predictor(object):
         cls = output[:, 6]
         scores = output[:, 4] * output[:, 5]
 
-        vis_res = vis(img, bboxes, scores, cls, cls_conf, self.cls_names)
-        return vis_res
+        vis_res, objs = vis(img, bboxes, scores, cls, cls_conf, self.cls_names)
+        return vis_res, objs
 
 
 def image_demo(predictor, vis_folder, path, current_time, save_result):
@@ -193,7 +191,7 @@ def image_demo(predictor, vis_folder, path, current_time, save_result):
     files.sort()
     for image_name in files:
         outputs, img_info = predictor.inference(image_name)
-        result_image = predictor.visual(outputs[0], img_info, predictor.confthre)
+        result_image, objs = predictor.visual(outputs[0], img_info, predictor.confthre)
         if save_result:
             save_folder = os.path.join(
                 vis_folder, time.strftime("%Y_%m_%d_%H_%M_%S", current_time)
@@ -204,41 +202,6 @@ def image_demo(predictor, vis_folder, path, current_time, save_result):
             cv2.imwrite(save_file_name, result_image)
         ch = cv2.waitKey(0)
         if ch == 27 or ch == ord("q") or ch == ord("Q"):
-            break
-
-
-def imageflow_demo(predictor, vis_folder, current_time, args):
-    cap = cv2.VideoCapture(args.path if args.demo == "video" else args.camid)
-    width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
-    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    if args.save_result:
-        save_folder = os.path.join(
-            vis_folder, time.strftime("%Y_%m_%d_%H_%M_%S", current_time)
-        )
-        os.makedirs(save_folder, exist_ok=True)
-        if args.demo == "video":
-            save_path = os.path.join(save_folder, os.path.basename(args.path))
-        else:
-            save_path = os.path.join(save_folder, "camera.mp4")
-        logger.info(f"video save_path is {save_path}")
-        vid_writer = cv2.VideoWriter(
-            save_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (int(width), int(height))
-        )
-    while True:
-        ret_val, frame = cap.read()
-        if ret_val:
-            outputs, img_info = predictor.inference(frame)
-            result_frame = predictor.visual(outputs[0], img_info, predictor.confthre)
-            if args.save_result:
-                vid_writer.write(result_frame)
-            else:
-                cv2.namedWindow("yolox", cv2.WINDOW_NORMAL)
-                cv2.imshow("yolox", result_frame)
-            ch = cv2.waitKey(1)
-            if ch == 27 or ch == ord("q") or ch == ord("Q"):
-                break
-        else:
             break
 
 
@@ -310,9 +273,93 @@ def main(exp, args):
     current_time = time.localtime()
     if args.demo == "image":
         image_demo(predictor, vis_folder, args.path, current_time, args.save_result)
-    elif args.demo == "video" or args.demo == "webcam":
-        imageflow_demo(predictor, vis_folder, current_time, args)
+    
 
+    
+def get_pred(exp, args):
+    if not args.experiment_name:
+        args.experiment_name = exp.exp_name
+
+    file_name = os.path.join(exp.output_dir, args.experiment_name)
+    os.makedirs(file_name, exist_ok=True)
+
+    if args.conf is not None:
+        exp.test_conf = args.conf
+    if args.nms is not None:
+        exp.nmsthre = args.nms
+    if args.tsize is not None:
+        exp.test_size = (args.tsize, args.tsize)
+
+    model = exp.get_model()
+
+    if args.device == "gpu":
+        model.cuda()
+        if args.fp16:
+            model.half()  # to FP16
+    model.eval()
+
+    if not args.trt:
+        if args.ckpt is None:
+            ckpt_file = os.path.join(file_name, "best_ckpt.pth")
+        else:
+            ckpt_file = args.ckpt
+        # logger.info("loading checkpoint")
+        ckpt = torch.load(ckpt_file, map_location="cpu")
+        # load the model state dict
+        model.load_state_dict(ckpt["model"])
+        # logger.info("loaded checkpoint done.")
+
+    if args.fuse:
+        # logger.info("\tFusing model...")
+        model = fuse_model(model)
+
+    trt_file = None
+    decoder = None
+
+    predictor = Predictor(
+        model, exp, COCO_CLASSES, trt_file, decoder,
+        args.device, args.fp16, args.legacy,
+    )
+    return predictor
+    
+def write_csv(objs):
+    df = pd.DataFrame(columns=["label", "img_id", "confidence",
+                        "xmin", "ymin", "xmax", "ymax"])
+    for obj in objs:
+        df = df.append(obj, ignore_index=True)
+    df.to_csv("/home/mw/project/results.csv", index=False)
+
+def my_image_demo(predictor, path):
+    if os.path.isdir(path):
+        files = get_image_list(path)
+    else:
+        files = [path]
+    files.sort()
+    all_objs = []
+    for image_name in files:
+        outputs, img_info = predictor.inference(image_name)
+        result_image, objs = predictor.visual(outputs[0], img_info, predictor.confthre)
+        if len(objs) > 0:
+            for i, obj in enumerate(objs):
+                objs[i]['img_id'] = image_name[:-4]
+                all_objs.append(objs[i])
+        else:
+            all_objs.append({'img_id':image_name[:-4]})
+        
+        ch = cv2.waitKey(0)
+        if ch == 27 or ch == ord("q") or ch == ord("Q"):
+            break
+    write_csv(all_objs)
+
+def vid2img(file_path) :
+    pass
+
+def invoke(_input:str) :
+    vid2img(_input)
+    args = make_parser().parse_args()
+    exp = get_exp(args.exp_file, args.name)
+    predictor = get_pred(exp, args)
+    my_image_demo(predictor, _input)
 
 if __name__ == "__main__":
     args = make_parser().parse_args()

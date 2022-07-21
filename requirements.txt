@@ -8,6 +8,7 @@ torchvision
 thop
 ninja
 tabulate
+opencv-python==4.0.1.23
 
 # verified versions
 # pycocotools corresponds to https://github.com/ppwwyyxx/cocoapi

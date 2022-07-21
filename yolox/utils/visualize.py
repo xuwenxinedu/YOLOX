@@ -23,11 +23,11 @@ def vis(img, boxes, scores, cls_ids, conf=0.5, class_names=None):
         objs.append(
             {
                 "label":class_names[cls_id],
-                "confidence":score,
-                "xmin":box[0],
-                "ymin":box[1],
-                "xmax":box[2],
-                "ymax":box[3]
+                "confidence":float(score),
+                "xmin":float(box[0]),
+                "ymin":float(box[1]),
+                "xmax":float(box[2]),
+                "ymax":float(box[3])
             }
         )
         color = (_COLORS[cls_id] * 255).astype(np.uint8).tolist()

@@ -271,11 +271,11 @@ def main(exp, args):
         args.device, args.fp16, args.legacy,
     )
     current_time = time.localtime()
-    if args.demo == "image":
+    if True:
         image_demo(predictor, vis_folder, args.path, current_time, args.save_result)
     
 
-    
+
 def get_pred(exp, args):
     if not args.experiment_name:
         args.experiment_name = exp.exp_name
@@ -339,12 +339,13 @@ def my_image_demo(predictor, path):
     for image_name in files:
         outputs, img_info = predictor.inference(image_name)
         result_image, objs = predictor.visual(outputs[0], img_info, predictor.confthre)
+        img_id = os.path.basename(image_name)[:-4]
         if len(objs) > 0:
             for i, obj in enumerate(objs):
-                objs[i]['img_id'] = image_name[:-4]
+                objs[i]['img_id'] = img_id
                 all_objs.append(objs[i])
         else:
-            all_objs.append({'img_id':image_name[:-4]})
+            all_objs.append({'img_id':img_id})
         
         ch = cv2.waitKey(0)
         if ch == 27 or ch == ord("q") or ch == ord("Q"):

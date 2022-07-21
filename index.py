@@ -353,14 +353,25 @@ def my_image_demo(predictor, path):
     write_csv(all_objs)
 
 def vid2img(file_path) :
-    pass
+    os.makedirs('./dirs')
+    for file in file_path:
+        path = os.path.join(file_path, file)
+        vidcap = cv2.VideoCapture(path)
+        success,image1 = vidcap.read()
+        image2 = image1
+        while success:
+            image2 = image2     
+            success, image1 = vidcap.read()
+        pic_name = os.path.basename(path)[:-4] + ".jpg"
+        c = os.path.join("./dirs/", pic_name)
+        cv2.imwrite(c, image2)
 
 def invoke(_input:str) :
     vid2img(_input)
     args = make_parser().parse_args()
     exp = get_exp(args.exp_file, args.name)
     predictor = get_pred(exp, args)
-    my_image_demo(predictor, _input)
+    my_image_demo(predictor, "./dirs/")
 
 if __name__ == "__main__":
     args = make_parser().parse_args()

@@ -354,13 +354,13 @@ def my_image_demo(predictor, path):
 
 def vid2img(file_path) :
     os.makedirs('./dirs')
-    for file in file_path:
+    for file in os.listdir(file_path):
         path = os.path.join(file_path, file)
         vidcap = cv2.VideoCapture(path)
         success,image1 = vidcap.read()
         image2 = image1
         while success:
-            image2 = image2     
+            image2 = image1
             success, image1 = vidcap.read()
         pic_name = os.path.basename(path)[:-4] + ".jpg"
         c = os.path.join("./dirs/", pic_name)

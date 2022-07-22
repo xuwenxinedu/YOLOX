@@ -328,6 +328,7 @@ def write_csv(objs):
     for obj in objs:
         df = df.append(obj, ignore_index=True)
     df.to_csv("/home/mw/project/results.csv", index=False)
+    return df
 
 def my_image_demo(predictor, path):
     if os.path.isdir(path):
@@ -350,10 +351,11 @@ def my_image_demo(predictor, path):
         # ch = cv2.waitKey(0)
         # if ch == 27 or ch == ord("q") or ch == ord("Q"):
         #     break
-    write_csv(all_objs)
+    return write_csv(all_objs)
 
 def vid2img(file_path) :
-    os.makedirs('./dirs')
+    if not os.path.exists('./ddirs/'):
+        os.makedirs('./ddirs')
     for file in os.listdir(file_path):
         path = os.path.join(file_path, file)
         vidcap = cv2.VideoCapture(path)
@@ -363,7 +365,7 @@ def vid2img(file_path) :
             image2 = image1
             success, image1 = vidcap.read()
         pic_name = os.path.basename(path)[:-4] + ".jpg"
-        c = os.path.join("./dirs/", pic_name)
+        c = os.path.join("./ddirs/", pic_name)
         cv2.imwrite(c, image2)
 
 def invoke(_input:str) :
@@ -371,7 +373,8 @@ def invoke(_input:str) :
     args = make_parser().parse_args()
     exp = get_exp(args.exp_file, args.name)
     predictor = get_pred(exp, args)
-    my_image_demo(predictor, "./dirs/")
+    df = my_image_demo(predictor, "./ddirs/")
+    print(df)
 
 if __name__ == "__main__":
     args = make_parser().parse_args()

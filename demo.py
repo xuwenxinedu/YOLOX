@@ -276,30 +276,50 @@ def main(exp, args):
     
 
 
-def get_pred(exp):
-    logger.info('=========get pred==============')
-    
+def get_pred(exp, args):
+    if not args.experiment_name:
+        args.experiment_name = exp.exp_name
+
+    file_name = os.path.join(exp.output_dir, args.experiment_name)
+    os.makedirs(file_name, exist_ok=True)
+
+    if args.conf is not None:
+        exp.test_conf = args.conf
+    if args.nms is not None:
+        exp.nmsthre = args.nms
+    if args.tsize is not None:
+        exp.test_size = (args.tsize, args.tsize)
+
     model = exp.get_model()
-    logger.info('=========get pred chpt 1==============')
-    model.cuda()
+
+    if args.device == "gpu":
+        model.cuda()
+        if args.fp16:
+            model.half()  # to FP16
     model.eval()
-        
-    ckpt_file = './best.pth'
-    logger.info("loading checkpoint")
-    ckpt = torch.load(ckpt_file, map_location="cpu")
-    # load the model state dict
-    model.load_state_dict(ckpt["model"])
-    logger.info("loaded checkpoint done.")
-    
+
+    if not args.trt:
+        if args.ckpt is None:
+            ckpt_file = os.path.join(file_name, "best_ckpt.pth")
+        else:
+            ckpt_file = args.ckpt
+        # logger.info("loading checkpoint")
+        ckpt = torch.load(ckpt_file, map_location="cpu")
+        # load the model state dict
+        model.load_state_dict(ckpt["model"])
+        # logger.info("loaded checkpoint done.")
+
+    if args.fuse:
+        # logger.info("\tFusing model...")
+        model = fuse_model(model)
+
     trt_file = None
     decoder = None
 
     predictor = Predictor(
         model, exp, COCO_CLASSES, trt_file, decoder,
-        'gpu', False, False,
+        args.device, args.fp16, args.legacy,
     )
-    logger.info('=========get pred chpt 2==============')
-
     return predictor
     
 def write_csv(objs):
@@ -331,8 +351,6 @@ def my_image_demo(predictor, path):
         # ch = cv2.waitKey(0)
         # if ch == 27 or ch == ord("q") or ch == ord("Q"):
         #     break
-    logger.info('============below are all objects============')
-    print(all_objs)
     return write_csv(all_objs)
 
 def vid2img(file_path) :
@@ -348,19 +366,18 @@ def vid2img(file_path) :
             success, image1 = vidcap.read()
         pic_name = os.path.basename(path)[:-4] + ".jpg"
         c = os.path.join("./ddirs/", pic_name)
-        print(c)
         cv2.imwrite(c, image2)
 
 def invoke(_input:str) :
     vid2img(_input)
-    # args = make_parser().parse_args()
-    # print(args)
-    exp = get_exp('./exps/default/yolox_s.py')
-    logger.info('predictor blow')
-    predictor = get_pred(exp)
-    logger.info('=========my image demo starting============')
+    args = make_parser().parse_args()
+    exp = get_exp(args.exp_file, args.name)
+    predictor = get_pred(exp, args)
     df = my_image_demo(predictor, "./ddirs/")
     print(df)
 
 if __name__ == "__main__":
-    invoke('/gdrive/My Drive/yolo/videos')
+    args = make_parser().parse_args()
+    exp = get_exp(args.exp_file, args.name)
+
+    main(exp, args)

@@ -11,3 +11,4 @@ pandas
 # verified versions
 # pycocotools corresponds to https://github.com/ppwwyyxx/cocoapi
 pycocotools>=2.0.2
+opencv-python==4.1.2.30

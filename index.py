@@ -278,7 +278,8 @@ def main(exp, args):
 
 def get_pred(exp):
     logger.info('=========get pred==============')
-    
+    exp.test_conf = 0.3
+    exp.nmsthre = 0.3
     model = exp.get_model()
     logger.info('=========get pred chpt 1==============')
     model.cuda()

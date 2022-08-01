@@ -180,7 +180,7 @@ class Predictor(object):
         scores = output[:, 4] * output[:, 5]
 
         vis_res, objs = vis(img, bboxes, scores, cls, cls_conf, self.cls_names)
-        return vis_res, objs
+        return vis_res
 
 
 def image_demo(predictor, vis_folder, path, current_time, save_result):
@@ -191,7 +191,7 @@ def image_demo(predictor, vis_folder, path, current_time, save_result):
     files.sort()
     for image_name in files:
         outputs, img_info = predictor.inference(image_name)
-        result_image, objs = predictor.visual(outputs[0], img_info, predictor.confthre)
+        result_image = predictor.visual(outputs[0], img_info, predictor.confthre)
         if save_result:
             save_folder = os.path.join(
                 vis_folder, time.strftime("%Y_%m_%d_%H_%M_%S", current_time)
